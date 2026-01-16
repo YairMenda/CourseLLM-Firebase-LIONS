@@ -2,8 +2,10 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { signInWithCustomToken } from "firebase/auth"
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth"
+import { doc, setDoc, serverTimestamp } from "firebase/firestore"
 import { getFirebaseAuth } from "@/lib/firebase-auth"
+import { db } from "@/lib/firebase"
 
 export default function TestSigninPage() {
   const router = useRouter()
@@ -18,11 +20,54 @@ export default function TestSigninPage() {
 
     async function run(token: string) {
       try {
-        await signInWithCustomToken(getFirebaseAuth(), token)
-        // After signing in, navigate to a neutral page so the app's AuthRedirector
-        // can inspect the profile/onboarding state and forward to the correct
-        // dashboard (or onboarding). We use /login as a neutral entry point.
-        router.replace('/login')
+        // Decode the mock token to get test user info
+        const decoded = JSON.parse(atob(token))
+        const { uid: testId, role, createProfile } = decoded
+        
+        // Use a deterministic email/password based on testId for the Auth Emulator
+        const email = `${testId}@test.local`
+        const password = `test-password-${testId}`
+        
+        const auth = getFirebaseAuth()
+        let firebaseUid: string
+        
+        // Try to sign in first, if user doesn't exist, create them
+        try {
+          const cred = await signInWithEmailAndPassword(auth, email, password)
+          firebaseUid = cred.user.uid
+        } catch (signInError: any) {
+          if (signInError.code === 'auth/user-not-found' || signInError.code === 'auth/invalid-credential') {
+            // Create the user in Auth Emulator
+            const cred = await createUserWithEmailAndPassword(auth, email, password)
+            firebaseUid = cred.user.uid
+          } else {
+            throw signInError
+          }
+        }
+        
+        // Create the Firestore profile using the actual Firebase uid
+        if (createProfile && role) {
+          await setDoc(
+            doc(db, "users", firebaseUid),
+            {
+              uid: firebaseUid,
+              email,
+              displayName: testId,
+              role,
+              department: "Test Dept",
+              courses: ["TST101"],
+              profileComplete: true,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          )
+        }
+        
+        // Navigate directly to the appropriate dashboard based on role
+        // This avoids race conditions with AuthRedirector
+        const targetPath = role === 'teacher' ? '/teacher' : '/student'
+        router.replace(targetPath)
       } catch (e) {
         console.error("test sign-in failed", e)
         router.replace("/login")

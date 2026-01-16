@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CourseLLM Quiz Service - Technical Report</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-light: #818cf8;
+            --primary-bg: #eef2ff;
+            --success: #10b981;
+            --success-bg: #d1fae5;
+            --warning: #f59e0b;
+            --warning-bg: #fef3c7;
+            --danger: #ef4444;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --bg: #f8fafc;
+            --card: #ffffff;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            font-size: 14px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+        
+        /* Header */
+        header {
+            background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
+            color: white;
+            padding: 48px 24px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+        
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            position: relative;
+        }
+        
+        header .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            position: relative;
+        }
+        
+        header .meta {
+            margin-top: 24px;
+            font-size: 0.875rem;
+            opacity: 0.8;
+            position: relative;
+        }
+        
+        /* Section */
+        .section {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 24px;
+            background: var(--primary);
+            border-radius: 2px;
+        }
+        
+        /* Grid layouts */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+        
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+        
+        @media (max-width: 768px) {
+            .grid-2, .grid-3 {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Feature cards */
+        .feature-card {
+            background: var(--bg);
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid var(--border);
+        }
+        
+        .feature-card h4 {
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .feature-card p {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+        
+        /* Architecture diagram */
+        .architecture {
+            background: linear-gradient(180deg, #fafbfc 0%, #f1f5f9 100%);
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+        }
+        
+        .arch-layer {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 8px;
+        }
+        
+        .arch-box {
+            background: white;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-weight: 500;
+            font-size: 0.875rem;
+            min-width: 140px;
+        }
+        
+        .arch-box.primary {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .arch-box.success {
+            background: var(--success);
+            color: white;
+            border-color: var(--success);
+        }
+        
+        .arch-arrow {
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            margin: 8px 0;
+        }
+        
+        /* Code blocks */
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            overflow-x: auto;
+        }
+        
+        .code-block .keyword { color: #c084fc; }
+        .code-block .string { color: #86efac; }
+        .code-block .comment { color: #64748b; }
+        .code-block .function { color: #60a5fa; }
+        
+        /* Stats */
+        .stat-card {
+            text-align: center;
+            padding: 24px;
+            background: var(--bg);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-top: 4px;
+        }
+        
+        /* Flow diagram */
+        .flow-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 16px 0;
+        }
+        
+        .flow-step {
+            background: white;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            flex: 1;
+            min-width: 120px;
+        }
+        
+        .flow-step.active {
+            border-color: var(--primary);
+            background: var(--primary-bg);
+        }
+        
+        .flow-step .step-num {
+            width: 28px;
+            height: 28px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.875rem;
+            margin-bottom: 8px;
+        }
+        
+        .flow-step .step-title {
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+        
+        .flow-arrow {
+            color: var(--text-muted);
+            font-size: 1.25rem;
+        }
+        
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        th {
+            background: var(--bg);
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .badge-primary { background: var(--primary-bg); color: var(--primary); }
+        .badge-success { background: var(--success-bg); color: var(--success); }
+        .badge-warning { background: var(--warning-bg); color: var(--warning); }
+        
+        /* List */
+        .check-list {
+            list-style: none;
+        }
+        
+        .check-list li {
+            padding: 8px 0;
+            padding-left: 28px;
+            position: relative;
+        }
+        
+        .check-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: bold;
+        }
+        
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 32px;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            border-top: 1px solid var(--border);
+            margin-top: 40px;
+        }
+        
+        /* Print styles */
+        @media print {
+            body { background: white; font-size: 12px; }
+            .container { padding: 0; }
+            .section { break-inside: avoid; box-shadow: none; }
+            header { padding: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>CourseLLM Quiz Service</h1>
+        <p class="subtitle">AI-Powered Adaptive Assessment System</p>
+        <p class="meta">Technical Report | CourseLLM Learning Platform | 2026</p>
+    </header>
+
+    <div class="container">
+        <!-- Executive Summary -->
+        <section class="section">
+            <h2 class="section-title">Executive Summary</h2>
+            <p style="margin-bottom: 16px;">
+                The <strong>Quiz Service</strong> is a microservice within the CourseLLM platform that provides intelligent, 
+                AI-powered assessment capabilities. It leverages Google's Gemini AI through Firebase Genkit to dynamically 
+                generate personalized quizzes, evaluate student responses with detailed feedback, and continuously update 
+                student learning trajectories based on performance.
+            </p>
+            <div class="grid-3" style="margin-top: 24px;">
+                <div class="stat-card">
+                    <div class="stat-value">2</div>
+                    <div class="stat-label">Question Types</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">5</div>
+                    <div class="stat-label">Core Functions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">∞</div>
+                    <div class="stat-label">Unique Quizzes</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Architecture -->
+        <section class="section">
+            <h2 class="section-title">System Architecture</h2>
+            <div class="architecture">
+                <div class="arch-layer">
+                    <div class="arch-box">React Client</div>
+                    <div class="arch-box">Next.js Pages</div>
+                </div>
+                <div class="arch-arrow">↓</div>
+                <div class="arch-layer">
+                    <div class="arch-box primary">Quiz Service (Server Actions)</div>
+                </div>
+                <div class="arch-arrow">↓</div>
+                <div class="arch-layer">
+                    <div class="arch-box success">Genkit AI Flows</div>
+                    <div class="arch-box">Firestore Database</div>
+                </div>
+                <div class="arch-arrow">↓</div>
+                <div class="arch-layer">
+                    <div class="arch-box">Google Gemini AI</div>
+                    <div class="arch-box">Firebase Emulators</div>
+                </div>
+            </div>
+            <p style="margin-top: 16px; color: var(--text-muted); text-align: center; font-size: 0.875rem;">
+                The service follows a clean microservices architecture with server-side actions, 
+                ensuring secure AI operations and data persistence.
+            </p>
+        </section>
+
+        <div class="grid-2">
+            <!-- Core Capabilities -->
+            <section class="section">
+                <h2 class="section-title">Core Capabilities</h2>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div class="feature-card">
+                        <h4>🎯 Dynamic Quiz Generation</h4>
+                        <p>AI generates unique questions based on course learning objectives. Supports custom prompts for focused assessments.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>🤖 Intelligent Grading</h4>
+                        <p>Multi-modal grading: instant scoring for multiple choice, AI evaluation (0-10 scale) for free-text responses.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>📈 Learning Trajectory</h4>
+                        <p>Automatic mastery updates per learning objective. Tracks progress history with reasoning.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>💾 Persistent Results</h4>
+                        <p>All quiz data stored in Firestore with full audit trail for student profiles.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Question Types -->
+            <section class="section">
+                <h2 class="section-title">Question Types</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Scoring</th>
+                            <th>Feedback</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="badge badge-primary">Multiple Choice</span></td>
+                            <td>Binary (0 or 1)</td>
+                            <td>Explanation shown</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-success">Free Text</span></td>
+                            <td>Scale 0-10</td>
+                            <td>AI-generated detailed feedback</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h4 style="margin-top: 24px; margin-bottom: 12px; font-weight: 600;">Mastery Updates</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Performance</th>
+                            <th>Delta</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>MC Correct</td><td><span class="badge badge-success">+15%</span></td></tr>
+                        <tr><td>MC Incorrect</td><td><span class="badge badge-warning">-5%</span></td></tr>
+                        <tr><td>Free Text 8-10</td><td><span class="badge badge-success">+10%</span></td></tr>
+                        <tr><td>Free Text 5-7</td><td><span class="badge badge-primary">+5%</span></td></tr>
+                        <tr><td>Free Text 0-4</td><td><span class="badge badge-warning">-5%</span></td></tr>
+                    </tbody>
+                </table>
+            </section>
+        </div>
+
+        <!-- Service Workflow -->
+        <section class="section">
+            <h2 class="section-title">Quiz Lifecycle Workflow</h2>
+            <div class="flow-container">
+                <div class="flow-step active">
+                    <div class="step-num">1</div>
+                    <div class="step-title">Request</div>
+                    <p style="font-size: 0.75rem; color: var(--text-muted);">Student selects course</p>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="step-num">2</div>
+                    <div class="step-title">Generate</div>
+                    <p style="font-size: 0.75rem; color: var(--text-muted);">AI creates questions</p>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="step-num">3</div>
+                    <div class="step-title">Persist</div>
+                    <p style="font-size: 0.75rem; color: var(--text-muted);">Save to Firestore</p>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="step-num">4</div>
+                    <div class="step-title">Answer</div>
+                    <p style="font-size: 0.75rem; color: var(--text-muted);">Student completes</p>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="step-num">5</div>
+                    <div class="step-title">Grade</div>
+                    <p style="font-size: 0.75rem; color: var(--text-muted);">AI evaluates</p>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="step-num">6</div>
+                    <div class="step-title">Update</div>
+                    <p style="font-size: 0.75rem; color: var(--text-muted);">Mastery tracking</p>
+                </div>
+            </div>
+        </section>
+
+        <div class="grid-2">
+            <!-- API Reference -->
+            <section class="section">
+                <h2 class="section-title">Service API</h2>
+                <div class="code-block">
+<span class="comment">// Generate a new quiz</span>
+<span class="keyword">await</span> <span class="function">generateQuiz</span>(
+  userId: <span class="string">"user-123"</span>,
+  courseId: <span class="string">"react-101"</span>,
+  customPrompt?: <span class="string">"Focus on hooks"</span>
+) <span class="comment">// Returns: quizId</span>
+
+<span class="comment">// Submit answers for grading</span>
+<span class="keyword">await</span> <span class="function">submitQuiz</span>(
+  userId, quizId,
+  answers: { 0: 2, 1: 0 },
+  textAnswers: { 2: <span class="string">"..."</span> }
+) <span class="comment">// Returns: QuizGradingOutput</span>
+
+<span class="comment">// Fetch quiz data</span>
+<span class="keyword">await</span> <span class="function">getQuiz</span>(quizId)
+<span class="keyword">await</span> <span class="function">getStudentQuizzes</span>(userId)
+                </div>
+            </section>
+
+            <!-- Key Features -->
+            <section class="section">
+                <h2 class="section-title">Technical Highlights</h2>
+                <ul class="check-list">
+                    <li><strong>Server Actions:</strong> All operations run server-side for security</li>
+                    <li><strong>Type Safety:</strong> Full TypeScript with Zod schema validation</li>
+                    <li><strong>Structured Output:</strong> Genkit ensures AI returns valid JSON</li>
+                    <li><strong>Authorization:</strong> User ownership verified before grading</li>
+                    <li><strong>Atomic Updates:</strong> Firestore transactions for data integrity</li>
+                    <li><strong>Timestamp Serialization:</strong> Proper handling for client hydration</li>
+                    <li><strong>Fallback Data:</strong> Mock data support for development mode</li>
+                    <li><strong>Custom Prompts:</strong> Student-specified focus areas for quizzes</li>
+                </ul>
+            </section>
+        </div>
+
+        <!-- Data Model -->
+        <section class="section">
+            <h2 class="section-title">Firestore Data Model</h2>
+            <div class="grid-3">
+                <div class="feature-card">
+                    <h4>📝 quizzes/{quizId}</h4>
+                    <p>Quiz document with questions, answers, status, scores, feedback, and LO mappings.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>👤 users/{uid}/quizResults</h4>
+                    <p>Subcollection storing completed quiz results with scores and AI feedback.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>📊 users/{uid}/skills</h4>
+                    <p>Learning objective mastery levels with history of changes and reasoning.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Technologies -->
+        <section class="section">
+            <h2 class="section-title">Technology Stack</h2>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <span class="badge badge-primary">Next.js 15</span>
+                <span class="badge badge-primary">React 19</span>
+                <span class="badge badge-primary">TypeScript</span>
+                <span class="badge badge-success">Firebase Genkit</span>
+                <span class="badge badge-success">Google Gemini AI</span>
+                <span class="badge badge-warning">Cloud Firestore</span>
+                <span class="badge badge-warning">Firebase Auth</span>
+                <span class="badge badge-primary">Zod Validation</span>
+                <span class="badge badge-primary">Server Actions</span>
+            </div>
+        </section>
+    </div>
+
+    <footer>
+        <p><strong>CourseLLM</strong> — AI-Powered Learning Platform</p>
+        <p style="margin-top: 8px;">Quiz Service Technical Report | Generated January 2026</p>
+    </footer>
+</body>
+</html>
+

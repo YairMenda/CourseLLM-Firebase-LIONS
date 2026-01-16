@@ -160,38 +160,43 @@ export function AssessmentClient() {
     setIsModeDialogOpen(false);
     setGeneratingFor(selectedCourseId);
 
-    startTransition(async () => {
-      try {
-        // Generate a new quiz using the quiz service (with optional custom prompt)
-        const promptToUse =
-          quizMode === "custom-prompt" && customPrompt.trim()
-            ? customPrompt.trim()
-            : undefined;
-        const quizId = await generateQuiz(
-          firebaseUser.uid,
-          selectedCourseId,
-          promptToUse
-        );
+    startTransition(() => {
+      const doGenerate = async () => {
+        try {
+          // Generate a new quiz using the quiz service (with optional custom prompt)
+          const promptToUse =
+            quizMode === "custom-prompt" && customPrompt.trim()
+              ? customPrompt.trim()
+              : undefined;
+          const quizId = await generateQuiz(
+            firebaseUser.uid,
+            selectedCourseId,
+            promptToUse
+          );
 
-        toast({
-          title: "Quiz Ready!",
-          description: promptToUse
-            ? "Your custom quiz has been generated based on your request."
-            : "Your personalized quiz has been generated.",
-        });
+          toast({
+            title: "Quiz Ready!",
+            description: promptToUse
+              ? "Your custom quiz has been generated based on your request."
+              : "Your personalized quiz has been generated.",
+          });
 
-        // Navigate to the quiz page
-        router.push(`/student/assessments/${quizId}`);
-      } catch (error) {
-        console.error("Failed to generate quiz:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to Generate Quiz",
-          description:
-            error instanceof Error ? error.message : "Please try again later.",
-        });
-        setGeneratingFor(null);
-      }
+          // Navigate to the quiz page
+          router.push(`/student/assessments/${quizId}`);
+        } catch (error) {
+          console.error("Failed to generate quiz:", error);
+          toast({
+            variant: "destructive",
+            title: "Failed to Generate Quiz",
+            description:
+              error instanceof Error
+                ? error.message
+                : "Please try again later.",
+          });
+          setGeneratingFor(null);
+        }
+      };
+      void doGenerate();
     });
   };
 
