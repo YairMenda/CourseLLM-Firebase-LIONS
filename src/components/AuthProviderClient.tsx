@@ -2,7 +2,8 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase-auth";
 import { doc, getDoc } from "firebase/firestore";
 import * as authService from "@/lib/authService";
 
@@ -44,6 +45,7 @@ export const AuthProviderClient: React.FC<{ children: React.ReactNode }> = ({ ch
   const [onboardingRequired, setOnboardingRequired] = useState(false);
 
   useEffect(() => {
+    const auth = getFirebaseAuth();
     const unsub = onAuthStateChanged(auth, async (user) => {
       setLoading(true);
       setFirebaseUser(user);
@@ -101,6 +103,7 @@ export const AuthProviderClient: React.FC<{ children: React.ReactNode }> = ({ ch
 
   async function refreshProfile(): Promise<Profile | null> {
     // Try to use the current firebaseUser state, fallback to auth.currentUser if needed
+    const auth = getFirebaseAuth();
     const current = firebaseUser || (auth && (auth.currentUser as FirebaseUser | null));
     if (!current) return null;
     const p = await loadProfile(current.uid);

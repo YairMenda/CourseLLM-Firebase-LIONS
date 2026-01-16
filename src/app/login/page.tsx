@@ -3,7 +3,7 @@
 import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/AuthProviderClient"
-import { auth } from "@/lib/firebase"
+import { getFirebaseAuth } from "@/lib/firebase-auth"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { LogIn, Loader2 } from "lucide-react"
@@ -35,7 +35,7 @@ export default function LoginPage() {
       setNavigating(true)
       await signInWithGoogle()
       // If this is the user's first sign-in, send them to onboarding immediately.
-      const user = auth.currentUser
+      const user = getFirebaseAuth().currentUser
       const isNew = !!(user && user.metadata && user.metadata.creationTime === user.metadata.lastSignInTime)
       if (isNew) return router.replace("/onboarding")
 

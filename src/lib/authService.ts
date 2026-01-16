@@ -1,8 +1,10 @@
-import { auth, googleProvider } from "./firebase";
+import { getFirebaseAuth, getGoogleProvider } from "./firebase-auth";
 import { signInWithPopup, signOut, signInWithRedirect } from "firebase/auth";
 
 export async function signInWithGoogle() {
   try {
+    const auth = getFirebaseAuth();
+    const googleProvider = getGoogleProvider();
     const res = await signInWithPopup(auth, googleProvider);
     return res.user;
   } catch (err: any) {
@@ -11,8 +13,12 @@ export async function signInWithGoogle() {
     // to the redirect-based flow which does not require cross-window communication.
     const msg = err?.message || "";
     if (/cross-?origin|opener|blocked a frame|window\.closed/i.test(msg)) {
-      console.warn("Popup blocked by Cross-Origin-Opener-Policy or similar, falling back to redirect sign-in.");
+      console.warn(
+        "Popup blocked by Cross-Origin-Opener-Policy or similar, falling back to redirect sign-in."
+      );
       try {
+        const auth = getFirebaseAuth();
+        const googleProvider = getGoogleProvider();
         await signInWithRedirect(auth, googleProvider);
         return null as any; // control will not reach here in redirect flow
       } catch (redirectErr) {
@@ -26,7 +32,7 @@ export async function signInWithGoogle() {
 }
 
 export async function signOutUser() {
-  await signOut(auth);
+  await signOut(getFirebaseAuth());
 }
 
 export function handleAuthError(err: any) {
@@ -43,7 +49,9 @@ export function handleAuthError(err: any) {
   // Cross-origin opener / popup blocking issues
   const msg = err?.message || "";
   if (/cross-?origin|opener|blocked a frame|window\.closed/i.test(msg)) {
-    console.warn("Popup-based sign-in blocked by browser COOP/COEP or embedding policy. Try enabling third-party cookies or use redirect-based sign-in.");
+    console.warn(
+      "Popup-based sign-in blocked by browser COOP/COEP or embedding policy. Try enabling third-party cookies or use redirect-based sign-in."
+    );
     return;
   }
   console.error("Auth error", err);

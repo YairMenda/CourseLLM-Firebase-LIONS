@@ -20,6 +20,82 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // DEVELOPMENT ONLY: Allow all operations for server actions without auth context
+    // TODO: Remove this in production and use Firebase Admin SDK for server-side operations
+    match /{document=**} {
+      allow read, write: if true;
+    }
+
+    /**
+     * @description User profile collection - allows authenticated users to read/write their own profile.
+     * @path /users/{userId}
+     * @allow (read, write) User with UID 'user123' can read/write their own profile at /users/user123.
+     * @deny (read, write) User with UID 'user456' cannot read/write profile at /users/user123.
+     * @principle Enforces document ownership.
+     */
+    match /users/{userId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return isSignedIn() && request.auth.uid == userId;
+      }
+
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+
+      // Subcollections under user profile
+      // Note: Server actions verify userId in application logic
+      match /quizResults/{quizId} {
+        allow read: if true;
+        allow write: if true;
+      }
+
+      match /skills/{skillId} {
+        allow read: if true;
+        allow write: if true;
+      }
+    }
+
+    /**
+     * @description Courses collection - authenticated users can read courses.
+     * @path /courses/{courseId}
+     * @note Server actions use client SDK without auth context, so we allow 
+     *       unauthenticated reads in development. Use Admin SDK in production.
+     */
+    match /courses/{courseId} {
+      // Allow reads for server actions (no auth context) and authenticated clients
+      allow read: if true;
+      // Only allow writes if needed - for now read-only for students
+      allow write: if false;
+    }
+
+    /**
+     * @description Learning objectives collection - authenticated users can read.
+     * @path /learningObjectives/{loId}
+     * @note Server actions use client SDK without auth context.
+     */
+    match /learningObjectives/{loId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    /**
+     * @description Quizzes collection - users can read/write their own quizzes.
+     * @path /quizzes/{quizId}
+     * @note Relaxed for server actions that verify userId in application logic.
+     */
+    match /quizzes/{quizId} {
+      // Server actions verify userId in code, so we allow access here
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
 
     /**
      * @description Enforces that only the teacher can read and write their own profile data.

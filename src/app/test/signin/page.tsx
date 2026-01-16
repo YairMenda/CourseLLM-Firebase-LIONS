@@ -3,7 +3,7 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { signInWithCustomToken } from "firebase/auth"
-import { auth } from "@/lib/firebase"
+import { getFirebaseAuth } from "@/lib/firebase-auth"
 
 export default function TestSigninPage() {
   const router = useRouter()
@@ -18,7 +18,7 @@ export default function TestSigninPage() {
 
     async function run(token: string) {
       try {
-        await signInWithCustomToken(auth, token)
+        await signInWithCustomToken(getFirebaseAuth(), token)
         // After signing in, navigate to a neutral page so the app's AuthRedirector
         // can inspect the profile/onboarding state and forward to the correct
         // dashboard (or onboarding). We use /login as a neutral entry point.

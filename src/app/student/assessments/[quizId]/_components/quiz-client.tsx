@@ -6,7 +6,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, CheckCircle, XCircle, ArrowRight, Award, RotateCw } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, CheckCircle, XCircle, ArrowRight, Award, RotateCw, ListChecks, PenLine } from 'lucide-react';
 import { QuizGradingOutput } from '@/ai/flows/quiz-grading';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -16,8 +18,14 @@ import { submitQuiz, generateQuiz, getQuiz } from '@/services/quiz-service';
 
 type Question = {
   text: string;
-  options: string[];
-  correctAnswerIndex: number;
+  type: 'multiple_choice' | 'free_text';
+  // For multiple choice
+  options?: string[];
+  correctAnswerIndex?: number;
+  // For free text
+  expectedAnswer?: string;
+  gradingCriteria?: string;
+  // Common
   learningObjectiveIndex: number;
   explanation: string;
 };
@@ -33,7 +41,8 @@ export function QuizClient({ quizId, courseId, courseTitle }: QuizClientProps) {
   const [currentQuizId, setCurrentQuizId] = useState<string>(quizId);
   const [activeCourseId, setActiveCourseId] = useState<string>(courseId);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<number, number>>({}); 
+  const [answers, setAnswers] = useState<Record<number, number>>({}); // For multiple choice
+  const [textAnswers, setTextAnswers] = useState<Record<number, string>>({}); // For free text
   const [status, setStatus] = useState<'loading' | 'ready' | 'submitting' | 'results'>('loading');
   const [results, setResults] = useState<QuizGradingOutput | null>(null);
   
@@ -49,6 +58,7 @@ export function QuizClient({ quizId, courseId, courseTitle }: QuizClientProps) {
   const loadQuiz = async (isRetry = false) => {
     setStatus('loading');
     setAnswers({});
+    setTextAnswers({});
     setCurrentQuestionIndex(0);
     setResults(null);
     
@@ -112,6 +122,20 @@ export function QuizClient({ quizId, courseId, courseTitle }: QuizClientProps) {
     setAnswers(prev => ({ ...prev, [currentQuestionIndex]: optionIndex }));
   };
 
+  const handleTextAnswerChange = (text: string) => {
+    setTextAnswers(prev => ({ ...prev, [currentQuestionIndex]: text }));
+  };
+
+  const isCurrentQuestionAnswered = () => {
+    const question = questions[currentQuestionIndex];
+    if (!question) return false;
+    
+    if (question.type === 'free_text') {
+      return (textAnswers[currentQuestionIndex]?.trim().length ?? 0) > 0;
+    }
+    return answers[currentQuestionIndex] !== undefined;
+  };
+
   const handleNext = () => {
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
@@ -138,7 +162,7 @@ export function QuizClient({ quizId, courseId, courseTitle }: QuizClientProps) {
     startTransition(async () => {
       try {
         // Call QuizService - this is the microservices entry point
-        const result = await submitQuiz(firebaseUser.uid, currentQuizId, answers);
+        const result = await submitQuiz(firebaseUser.uid, currentQuizId, answers, textAnswers);
         setResults(result);
         setStatus('results');
         
@@ -165,7 +189,7 @@ export function QuizClient({ quizId, courseId, courseTitle }: QuizClientProps) {
 
   if (status === 'loading') {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] w-full px-4 space-y-6 animate-in fade-in duration-500">
         <div className="relative">
             <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full animate-pulse" />
             <Loader2 className="h-16 w-16 animate-spin text-primary relative z-10" />
@@ -180,8 +204,8 @@ export function QuizClient({ quizId, courseId, courseTitle }: QuizClientProps) {
 
   if (status === 'results' && results) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh] animate-in zoom-in-95 duration-300 w-full">
-        <Card className="border-none shadow-2xl w-full max-w-3xl overflow-hidden">
+      <div className="flex items-center justify-center min-h-[60vh] animate-in zoom-in-95 duration-300 w-full px-4">
+        <Card className="border-none shadow-2xl w-full max-w-3xl mx-auto overflow-hidden">
             <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-8 text-center border-b">
                 <div className="mx-auto bg-background p-4 rounded-full w-fit mb-6 shadow-lg ring-4 ring-primary/10">
                   <Award className="h-10 w-10 text-primary" />
@@ -242,8 +266,8 @@ export function QuizClient({ quizId, courseId, courseTitle }: QuizClientProps) {
   const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[80vh] w-full py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="w-full max-w-3xl space-y-8">
+    <div className="flex flex-col items-center justify-center min-h-[80vh] w-full py-8 px-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="w-full max-w-3xl mx-auto space-y-8">
         <div className="space-y-4">
             <div className="flex justify-between text-sm font-medium text-muted-foreground">
             <span>Question {currentQuestionIndex + 1} of {questions.length}</span>
@@ -253,63 +277,97 @@ export function QuizClient({ quizId, courseId, courseTitle }: QuizClientProps) {
         </div>
 
         <Card className="min-h-[450px] flex flex-col border-none shadow-xl overflow-hidden">
-            <CardHeader className="bg-muted/20 pb-6 pt-6 px-8 border-b text-center">
-            <CardTitle className="text-xl leading-relaxed font-semibold">
+            <CardHeader className="bg-muted/20 pb-6 pt-6 px-8 border-b">
+              <div className="flex justify-center mb-3">
+                <Badge 
+                  variant="secondary" 
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1",
+                    currentQuestion.type === 'free_text' 
+                      ? "bg-purple-100 text-purple-700 border-purple-200" 
+                      : "bg-blue-100 text-blue-700 border-blue-200"
+                  )}
+                >
+                  {currentQuestion.type === 'free_text' ? (
+                    <><PenLine className="h-3.5 w-3.5" /> Written Response</>
+                  ) : (
+                    <><ListChecks className="h-3.5 w-3.5" /> Multiple Choice</>
+                  )}
+                </Badge>
+              </div>
+              <CardTitle className="text-xl leading-relaxed font-semibold text-center">
                 {currentQuestion.text}
-            </CardTitle>
+              </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 p-8">
-            <RadioGroup
-                key={currentQuestionIndex} // Force re-mount of RadioGroup to clear internal state visual glitches if any
-                value={answers[currentQuestionIndex]?.toString() ?? ""} // Ensure strictly controlled
-                onValueChange={(val) => handleOptionSelect(parseInt(val))}
-                className="space-y-4"
-            >
-                {currentQuestion.options.map((option, idx) => (
-                <div 
-                    key={idx} 
-                    onClick={() => handleOptionSelect(idx)}
-                    className={cn(
+              {currentQuestion.type === 'free_text' ? (
+                // Free text question
+                <div className="space-y-4">
+                  <Textarea
+                    key={currentQuestionIndex}
+                    placeholder="Type your answer here..."
+                    value={textAnswers[currentQuestionIndex] ?? ""}
+                    onChange={(e) => handleTextAnswerChange(e.target.value)}
+                    className="min-h-[200px] resize-none text-base leading-relaxed"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Write a complete answer. Your response will be evaluated by AI for accuracy and completeness.
+                  </p>
+                </div>
+              ) : (
+                // Multiple choice question
+                <RadioGroup
+                  key={currentQuestionIndex}
+                  value={answers[currentQuestionIndex]?.toString() ?? ""}
+                  onValueChange={(val) => handleOptionSelect(parseInt(val))}
+                  className="space-y-4"
+                >
+                  {currentQuestion.options?.map((option, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => handleOptionSelect(idx)}
+                      className={cn(
                         "flex items-center space-x-3 border-2 rounded-xl p-4 cursor-pointer transition-all duration-200",
                         answers[currentQuestionIndex] === idx 
-                            ? "border-primary bg-primary/5 shadow-md scale-[1.01]" 
-                            : "border-transparent bg-muted/30 hover:bg-muted/50 hover:border-muted-foreground/20"
-                    )}
-                >
-                    <RadioGroupItem value={idx.toString()} id={`opt-${idx}`} className="sr-only" />
-                    <div className={cn(
+                          ? "border-primary bg-primary/5 shadow-md scale-[1.01]" 
+                          : "border-transparent bg-muted/30 hover:bg-muted/50 hover:border-muted-foreground/20"
+                      )}
+                    >
+                      <RadioGroupItem value={idx.toString()} id={`opt-${idx}`} className="sr-only" />
+                      <div className={cn(
                         "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors flex-shrink-0",
                         answers[currentQuestionIndex] === idx ? "border-primary" : "border-muted-foreground/30"
-                    )}>
+                      )}>
                         {answers[currentQuestionIndex] === idx && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
+                      </div>
+                      <Label htmlFor={`opt-${idx}`} className="flex-1 cursor-pointer font-medium text-base">
+                        {option}
+                      </Label>
                     </div>
-                    <Label htmlFor={`opt-${idx}`} className="flex-1 cursor-pointer font-medium text-base">
-                    {option}
-                    </Label>
-                </div>
-                ))}
-            </RadioGroup>
+                  ))}
+                </RadioGroup>
+              )}
             </CardContent>
             <CardFooter className="flex justify-between p-8 bg-muted/10 border-t">
-            <Button
+              <Button
                 variant="ghost"
                 onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
                 disabled={currentQuestionIndex === 0 || status === 'submitting'}
                 className="text-muted-foreground hover:text-foreground"
-            >
+              >
                 Previous
-            </Button>
-            <Button 
+              </Button>
+              <Button 
                 onClick={handleNext}
-                disabled={answers[currentQuestionIndex] === undefined || status === 'submitting'}
+                disabled={!isCurrentQuestionAnswered() || status === 'submitting'}
                 className="px-8 h-11 shadow-lg shadow-primary/20 text-base"
-            >
+              >
                 {currentQuestionIndex === questions.length - 1 ? (
-                status === 'submitting' ? <Loader2 className="animate-spin h-5 w-5 mr-2" /> : 'Submit Quiz'
+                  status === 'submitting' ? <Loader2 className="animate-spin h-5 w-5 mr-2" /> : 'Submit Quiz'
                 ) : (
-                <>Next Question <ArrowRight className="ml-2 h-5 w-5" /></>
+                  <>Next Question <ArrowRight className="ml-2 h-5 w-5" /></>
                 )}
-            </Button>
+              </Button>
             </CardFooter>
         </Card>
       </div>

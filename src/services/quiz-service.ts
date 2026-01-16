@@ -17,33 +17,55 @@ import { db } from "@/lib/firebase";
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, collection, Timestamp, query, where, getDocs, addDoc } from "firebase/firestore";
 import { generateQuizFlow, QuizGenerationInput } from "@/ai/flows/quiz-generation";
 import { gradeQuizFlow, QuizGradingInput, QuizGradingOutput } from "@/ai/flows/quiz-grading";
+import { courses as mockCourses, learningObjectives as mockLOs } from "@/lib/mock-data";
 
 /**
  * Generates a new quiz for a student based on a course.
  * Persists the generated quiz and returns the quiz ID.
+ * @param customPrompt - Optional custom user prompt for specific topics to focus on
  */
-export async function generateQuiz(userId: string, courseId: string): Promise<string> {
+export async function generateQuiz(userId: string, courseId: string, customPrompt?: string): Promise<string> {
   // 1. Fetch Course Details (Title) and Learning Objectives
+  // Try Firestore first, fall back to mock data for development
+  let courseTitle: string;
+  let learningObjectives: string[];
+  let loIds: string[];
+
   const courseRef = doc(db, "courses", courseId);
   const courseSnap = await getDoc(courseRef);
   
-  if (!courseSnap.exists()) {
+  if (courseSnap.exists()) {
+    const courseData = courseSnap.data();
+    courseTitle = courseData.title;
+    
+    // Fetch LOs from Firestore
+    const loQuery = query(collection(db, "learningObjectives"), where("courseId", "==", courseId));
+    const loSnap = await getDocs(loQuery);
+    learningObjectives = loSnap.docs.map(d => d.data().description);
+    loIds = loSnap.docs.map(d => d.id);
+  } else {
+    // Fall back to mock data for development
+    const mockCourse = mockCourses.find(c => c.id === courseId);
+    if (!mockCourse) {
       throw new Error("Course not found");
+    }
+    courseTitle = mockCourse.title;
+    
+    // Parse learning objectives from course string or use mock LOs
+    const courseLOs = mockLOs.filter(lo => lo.courseId === courseId);
+    learningObjectives = courseLOs.length > 0 
+      ? courseLOs.map(lo => lo.description)
+      : mockCourse.learningObjectives.split(/\d+\.\s*/).filter(Boolean);
+    loIds = courseLOs.map(lo => lo.id);
   }
-  const courseData = courseSnap.data();
-  
-  // Fetch LOs
-  const loQuery = query(collection(db, "learningObjectives"), where("courseId", "==", courseId));
-  const loSnap = await getDocs(loQuery);
-  const learningObjectives = loSnap.docs.map(d => d.data().description);
-  const loIds = loSnap.docs.map(d => d.id);
 
   // 2. Call AI Flow to Generate Quiz
   const input: QuizGenerationInput = {
-      courseTitle: courseData.title,
+      courseTitle: courseTitle,
       learningObjectives: learningObjectives,
       difficulty: 'medium',
-      count: 5
+      count: 5,
+      ...(customPrompt && { customPrompt }),
   };
   
   const generatedQuiz = await generateQuizFlow(input);
@@ -52,13 +74,14 @@ export async function generateQuiz(userId: string, courseId: string): Promise<st
   const quizData = {
       userId,
       courseId,
-      title: `Practice: ${courseData.title}`,
+      title: customPrompt ? `Custom Quiz: ${courseTitle}` : `Practice: ${courseTitle}`,
       questions: generatedQuiz.questions,
       loIds: loIds,
       status: 'pending',
       createdAt: Timestamp.now(),
       totalQuestions: generatedQuiz.questions.length,
-      score: 0
+      score: 0,
+      ...(customPrompt && { customPrompt }),
   };
 
   const quizRef = await addDoc(collection(db, "quizzes"), quizData);
@@ -68,8 +91,15 @@ export async function generateQuiz(userId: string, courseId: string): Promise<st
 /**
  * Submits a quiz for grading.
  * Calls the grading AI, saves the results, and updates user mastery.
+ * @param studentAnswers - Multiple choice answers (question index -> option index)
+ * @param studentTextAnswers - Free text answers (question index -> text response)
  */
-export async function submitQuiz(userId: string, quizId: string, studentAnswers: Record<number, number>): Promise<QuizGradingOutput> {
+export async function submitQuiz(
+    userId: string, 
+    quizId: string, 
+    studentAnswers: Record<number, number>,
+    studentTextAnswers: Record<number, string> = {}
+): Promise<QuizGradingOutput> {
     // 1. Fetch the quiz from DB
     const quizRef = doc(db, "quizzes", quizId);
     const quizSnap = await getDoc(quizRef);
@@ -84,27 +114,46 @@ export async function submitQuiz(userId: string, quizId: string, studentAnswers:
         throw new Error("Unauthorized access to quiz");
     }
 
-    // 2. Prepare input for Grading Flow
+    // 2. Prepare input for Grading Flow (handles both question types)
     const gradingInput: QuizGradingInput = {
         quizId,
-        questions: quizData.questions.map((q: any, index: number) => ({
-            questionId: `q-${index}`,
-            text: q.text,
-            correctAnswerIndex: q.correctAnswerIndex,
-            studentAnswerIndex: studentAnswers[index] ?? -1,
-            learningObjectiveId: quizData.loIds[q.learningObjectiveIndex]
-        }))
+        questions: quizData.questions.map((q: any, index: number) => {
+            const baseQuestion = {
+                questionId: `q-${index}`,
+                text: q.text,
+                type: q.type || 'multiple_choice',
+                learningObjectiveId: quizData.loIds[q.learningObjectiveIndex]
+            };
+
+            if (q.type === 'free_text') {
+                return {
+                    ...baseQuestion,
+                    expectedAnswer: q.expectedAnswer,
+                    gradingCriteria: q.gradingCriteria,
+                    studentTextAnswer: studentTextAnswers[index] ?? '',
+                };
+            } else {
+                return {
+                    ...baseQuestion,
+                    correctAnswerIndex: q.correctAnswerIndex,
+                    studentAnswerIndex: studentAnswers[index] ?? -1,
+                };
+            }
+        })
     };
 
     // 3. Call Grading Flow
     const result = await gradeQuizFlow(gradingInput);
 
-    // 4. Update Quiz with Results
+    // 4. Update Quiz with Results (including both answer types for review)
     await updateDoc(quizRef, {
         status: 'completed',
         score: result.score,
         feedback: result.feedback,
         loUpdates: result.loUpdates,
+        freeTextGrades: result.freeTextGrades || [],
+        studentAnswers: studentAnswers,
+        studentTextAnswers: studentTextAnswers,
         completedAt: Timestamp.now()
     });
 
@@ -128,6 +177,7 @@ export async function saveQuizResult(userId: string, quizId: string, result: Qui
     totalQuestions: result.totalQuestions,
     feedback: result.feedback,
     loUpdates: result.loUpdates,
+    freeTextGrades: result.freeTextGrades || [],
     dateTaken: Timestamp.now(),
     status: 'completed'
   });
@@ -173,22 +223,40 @@ export async function updateLearningTrajectory(userId: string, loUpdates: { loId
 
 /**
  * Fetches a quiz by ID.
+ * Serializes Firestore Timestamps to ISO strings for client component compatibility.
  */
 export async function getQuiz(quizId: string) {
   const quizRef = doc(db, "quizzes", quizId);
   const snapshot = await getDoc(quizRef);
   
   if (snapshot.exists()) {
-    return { id: snapshot.id, ...snapshot.data() };
+    const data = snapshot.data();
+    return {
+      id: snapshot.id,
+      ...data,
+      // Convert Timestamps to ISO strings for client component serialization
+      createdAt: data.createdAt?.toDate?.()?.toISOString() ?? null,
+      completedAt: data.completedAt?.toDate?.()?.toISOString() ?? null,
+    };
   }
   return null;
 }
 
 /**
  * Fetches all quizzes taken by a student.
+ * Serializes Firestore Timestamps to ISO strings for client component compatibility.
  */
 export async function getStudentQuizzes(userId: string) {
     const q = query(collection(db, "quizzes"), where("userId", "==", userId));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            // Convert Timestamps to ISO strings for client component serialization
+            createdAt: data.createdAt?.toDate?.()?.toISOString() ?? null,
+            completedAt: data.completedAt?.toDate?.()?.toISOString() ?? null,
+        };
+    });
 }
